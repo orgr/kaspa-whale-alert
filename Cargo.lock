@@ -694,6 +694,7 @@ dependencies = [
  "prost",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "twitter-v2",
