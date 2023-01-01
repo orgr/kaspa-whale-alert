@@ -12,7 +12,7 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::Streaming;
 
 pub struct KaspaHandler {
-    client: RpcClient<Channel>,
+    // client: RpcClient<Channel>,
     stream: Streaming<KaspadMessage>,
     send_channel: Sender<KaspadMessage>,
 }
@@ -31,7 +31,7 @@ impl KaspaHandler {
             .await?
             .into_inner();
         Ok(Self {
-            client,
+            // client,
             stream,
             send_channel,
         })
@@ -87,12 +87,7 @@ impl KaspaHandler {
             }
             println!("{}", tx.inputs.len());
             println!("{}", tx.outputs.len());
-            tx.outputs.iter().map(|op| {
-                println!(
-                    "output sig: {}",
-                    op.script_public_key.as_ref().unwrap().script_public_key
-                );
-            });
+
             let total_output: u64 = tx.outputs.iter().map(|op| op.amount).sum();
             let max_output: u64 = tx.outputs.iter().map(|op| op.amount).max().unwrap();
             println!(
