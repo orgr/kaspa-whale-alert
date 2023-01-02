@@ -39,7 +39,6 @@ async fn main() -> Result<(), Error> {
         let mut kaspa_handler = KaspaHandler::connect(kaspad_address.clone()).await?;
         kaspa_handler.listen().await?;
     }
-    println!("done listening");
     Ok(())
 }
 

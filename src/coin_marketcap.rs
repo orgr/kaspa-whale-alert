@@ -23,6 +23,7 @@ impl MarketcapStatus {
     }
 }
 
+const coinmarketcap_request_url: &str = "https://api.coingecko.com/api/v3/simple/price?ids=kaspa&vs_currencies=usd&include_market_cap=true";
 impl CoinMarketcapHandler {
     pub fn new() -> Self {
         let status = Arc::new(Mutex::new(MarketcapStatus::new()));
@@ -35,23 +36,37 @@ impl CoinMarketcapHandler {
     pub async fn listen(&self, precent_threshold: u32) {
         println!("coinmarketcap started sync");
 
-        let mut interval = time::interval(Duration::from_secs(10 * 60));
+        // let mut interval = time::interval(Duration::from_secs(10 * 60));
+        let mut interval = time::interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
-            self.sync();
+            println!("about to sync!");
+            match self.sync().await {
+                Err(e) => println!("{:?}", e),
+                Ok(_) => println!("it went ok"),
+            }
+
+            println!("finished sync!");
         }
     }
 
-    async fn sync(&self) {
+    async fn sync(&self) -> Result<(), Error> {
         let status_locked = self.status.clone();
         let marketcap: u64;
         let price: u64;
 
-        if let Ok(mut status) = status_locked.lock() {
-            status.current_price = price;
-            status.threshold = (marketcap / 100 as u64) * self.precent_threshold as u64;
-            status.init = true;
-        };
+        let response = reqwest::get(coinmarketcap_request_url)
+            .await?
+            .text()
+            .await?;
+
+        println!("==============================={:?}", response);
+        // if let Ok(mut status) = status_locked.lock() {
+        //     status.current_price = price;
+        //     status.threshold = (marketcap / 100 as u64) * self.precent_threshold as u64;
+        //     status.init = true;
+        // };
+        Ok(())
     }
 
     pub async fn is_amount_greater_than_precent_of_marketcap(

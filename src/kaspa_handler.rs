@@ -76,7 +76,7 @@ impl KaspaHandler {
         println!("new block notified!",);
         let verbose_data = extract_verbose_data(&block_notif)?;
         if !verbose_data.is_chain_block {
-            println!("not part of chain");
+            // println!("not part of chain");
             return Ok(());
         }
 
@@ -85,18 +85,18 @@ impl KaspaHandler {
             if tx.inputs.len() == 0 {
                 continue;
             }
-            println!("{}", tx.inputs.len());
-            println!("{}", tx.outputs.len());
+            // println!("{}", tx.inputs.len());
+            // println!("{}", tx.outputs.len());
 
             let total_output: u64 = tx.outputs.iter().map(|op| op.amount).sum();
             let max_output: u64 = tx.outputs.iter().map(|op| op.amount).max().unwrap();
-            println!(
-                "tx total output amount {}, largest output amount {}",
-                total_output, max_output
-            );
+            // println!(
+            //     "tx total output amount {}, largest output amount {}",
+            //     total_output, max_output
+            // );
         }
 
-        println!("accepted block!");
+        // println!("accepted block!");
 
         Ok(())
     }

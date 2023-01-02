@@ -692,6 +692,7 @@ version = "0.1.0"
 dependencies = [
  "dotenv",
  "prost",
+ "reqwest",
  "serde_json",
  "tokio",
  "tokio-stream",
