@@ -1,8 +1,8 @@
-mod coin_marketcap;
+mod coingecko_handler;
 mod kaspa_handler;
 mod twitter;
 
-use coin_marketcap::CoinMarketcapHandler;
+use coingecko_handler::CoinGeckoHandler;
 use dotenv::dotenv;
 use kaspa_handler::KaspaHandler;
 use twitter::TwitterKeys;
@@ -28,14 +28,14 @@ async fn main() -> Result<(), Error> {
         IpAddr::from_str(&kaspad_address)?;
         kaspad_address = format!("grpc://{}:{}", kaspad_address, port);
     }
-    let whale_factor: u32 = parse_env_var("WHALE_FACTOR").parse()?;
+    let whale_factor: u8 = parse_env_var("WHALE_FACTOR").parse()?;
 
     // let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
     // let message = "Whale alert".to_string();
     // twitter_keys.tweet(message).await
     loop {
-        let coin_marketcap_handler = CoinMarketcapHandler::new();
-        tokio::spawn(async move { coin_marketcap_handler.listen(whale_factor).await });
+        let mut coingecko_handler = CoinGeckoHandler::new();
+        tokio::spawn(async move { coingecko_handler.listen(whale_factor).await });
         let mut kaspa_handler = KaspaHandler::connect(kaspad_address.clone()).await?;
         kaspa_handler.listen().await?;
     }
