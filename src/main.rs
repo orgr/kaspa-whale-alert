@@ -9,10 +9,9 @@ use twitter::TwitterKeys;
 
 use std::{error::Error as StdError, net::IpAddr, str::FromStr};
 
-pub type Error = Box<dyn StdError + Send + Sync + 'static>;
+pub type Error = Box<dyn StdError + 'static>;
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
     dotenv().ok();
     let consumer_key = parse_env_var("CONSUMER_KEY");
     let consumer_secret = parse_env_var("CONSUMER_SECRET");
@@ -25,14 +24,15 @@ async fn main() -> Result<(), Error> {
     // twitter_keys.tweet(message).await;
 
     let coingecko_handler = CoinGeckoHandler::new();
-    coingecko_handler.clone().listen().await;
+    coingecko_handler.listen();
 
+    println!("WE GOT HERE!!!");
     let kaspa_rest_handler = RestHandler::new();
-    kaspa_rest_handler.clone().listen().await;
+    println!("WE GOT HERE AGAIN!!!");
+
     // let rest_handler = R
     // let market_status = coingecko_handler.clone().get_price();
     loop {}
-    Ok(())
 }
 
 fn parse_env_var(var_name: &str) -> String {

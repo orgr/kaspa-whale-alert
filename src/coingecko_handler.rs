@@ -1,7 +1,10 @@
 use crate::Error;
 use serde::Deserialize;
-use std::sync::{Arc, Mutex};
-use tokio::time::{self, Duration};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
 
 pub struct CoinGeckoHandler {
     price: Mutex<f64>,
@@ -27,28 +30,26 @@ impl CoinGeckoHandler {
         Arc::new(Self { price })
     }
 
-    pub async fn listen(self: Arc<Self>) {
-        tokio::spawn(async move {
+    pub fn listen(self: Arc<Self>) {
+        let arc = self.clone();
+        thread::spawn(move || {
             println!("coinmarketcap started sync");
-
-            // let mut interval = time::interval(Duration::from_secs(5 * 60));
-            let mut interval = time::interval(Duration::from_secs(POLL_INTERVAL_SEC));
             loop {
-                interval.tick().await;
                 println!("about to sync!");
-                match self.sync().await {
+                match arc.sync() {
                     Err(e) => println!("{:?}", e),
                     Ok(_) => println!("it went ok"),
                 }
                 println!("finished sync!");
+                thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }
         });
     }
 
-    async fn sync(&self) -> Result<(), Error> {
+    fn sync(&self) -> Result<(), Error> {
         let price: f64;
 
-        let response: CoingeckoResponse = reqwest::get(COINGECKO_REQUEST_URL).await?.json().await?;
+        let response: CoingeckoResponse = reqwest::blocking::get(COINGECKO_REQUEST_URL)?.json()?;
         println!("response {:?}", response);
         self.update(response.kaspa.usd);
         Ok(())
