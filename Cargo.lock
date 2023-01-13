@@ -1057,6 +1057,8 @@ dependencies = [
 [[package]]
 name = "rust_engineio"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6cd434cde8795564d406eae1b13307dbe8746b70f42362b10ed8277743b5f25"
 dependencies = [
  "adler32",
  "async-stream",
@@ -1080,6 +1082,8 @@ dependencies = [
 [[package]]
 name = "rust_socketio"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bc5605d34e5a1ce22bd0d7e20180a042f95a617a461577e25fc2f29a9751b90"
 dependencies = [
  "adler32",
  "backoff",

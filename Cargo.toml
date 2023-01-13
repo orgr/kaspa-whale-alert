@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 dotenv = "0.15.0"
 reqwest = "0.11.13"
-rust_socketio = {path = "../rust-socketio/socketio"}
+rust_socketio = "0.4.0"
 serde = "1.0.152"
 serde_json = "1.0.91"
 twitter-v2 = "0.1.8"

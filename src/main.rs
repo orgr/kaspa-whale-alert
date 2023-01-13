@@ -7,7 +7,7 @@ use dotenv::dotenv;
 use kaspa_rest_handler::RestHandler;
 use twitter::TwitterKeys;
 
-use std::{error::Error as StdError, net::IpAddr, str::FromStr};
+use std::{error::Error as StdError, net::IpAddr, str::FromStr, sync::mpsc};
 
 pub type Error = Box<dyn StdError + 'static>;
 
@@ -20,27 +20,39 @@ fn main() -> Result<(), Error> {
     let whale_factor: u8 = parse_env_var("WHALE_FACTOR").parse()?;
 
     // let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
-    let message = "Whale alert".to_string();
+
     // twitter_keys.tweet(message).await;
 
-    let coingecko_handler = CoinGeckoHandler::new();
-    coingecko_handler.listen();
+    let (tx, rx) = mpsc::sync_channel::<Vec<u64>>(10);
+    let coingecko_handler = CoinGeckoHandler::handle();
 
-    println!("WE GOT HERE!!!");
-    let kaspa_rest_handler = RestHandler::new();
-    println!("WE GOT HERE AGAIN!!!");
+    let kaspa_rest_handler = RestHandler::handle(tx);
 
-    // let rest_handler = R
-    // let market_status = coingecko_handler.clone().get_price();
-    loop {}
+    loop {
+        let amount_vec = rx.recv().unwrap();
+        for amount in amount_vec {
+            let kas_amount = (amount / 100000000) as f64;
+            let usd_amount = kas_amount * coingecko_handler.get_price();
+            println!(
+                "amount received: {}, amount in KAS: {}, in USD: {}",
+                amount, kas_amount, usd_amount
+            );
+
+            let circulation = kaspa_rest_handler.get_circulation();
+            let threshold = (whale_factor as f64) / 100.0 * circulation;
+            println!("CIRCULATION {}, THRESHOLD {}", circulation, threshold);
+            if kas_amount > threshold {
+                let message = format!(
+                    "Whale Alert!!! a transaction of {} KAS has been detected (more than {}% of circulation!)",
+                    kas_amount,
+                    whale_factor);
+                println!("{}", message);
+            }
+        }
+    }
 }
 
 fn parse_env_var(var_name: &str) -> String {
     let err_message = format!("{} must be set.", var_name);
     std::env::var(var_name).expect(&err_message)
 }
-
-// TODO
-// 1. You have coingecko price, updated every 5 minutes.
-// 2. You are requesting for blockdag, you don't need that, there is a websocket room that gives the latest blocks
-// -- see it here: https://github.com/lAmeR1/kaspa-rest-server/blob/main/sockets/blocks.py

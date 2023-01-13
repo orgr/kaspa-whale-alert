@@ -12,7 +12,7 @@ pub struct CoinGeckoHandler {
 
 const COINGECKO_REQUEST_URL: &str =
     "https://api.coingecko.com/api/v3/simple/price?ids=kaspa&vs_currencies=usd";
-const POLL_INTERVAL_SEC: u64 = 5;
+const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
 #[derive(Debug, Deserialize)]
 struct CoingeckoResponse {
@@ -25,18 +25,20 @@ struct CoingeckoResponseCoin {
 }
 
 impl CoinGeckoHandler {
-    pub fn new() -> Arc<Self> {
+    pub fn handle() -> Arc<Self> {
         let price = Mutex::new(0.0);
-        Arc::new(Self { price })
+
+        let arc = Arc::new(Self { price });
+        arc.clone().listen();
+        arc
     }
 
-    pub fn listen(self: Arc<Self>) {
-        let arc = self.clone();
+    fn listen(self: Arc<Self>) {
         thread::spawn(move || {
-            println!("coinmarketcap started sync");
+            println!("COINMARKETCAP started sync");
             loop {
-                println!("about to sync!");
-                match arc.sync() {
+                println!("COINMARKETCAP - about to sync!");
+                match self.update() {
                     Err(e) => println!("{:?}", e),
                     Ok(_) => println!("it went ok"),
                 }
@@ -46,27 +48,15 @@ impl CoinGeckoHandler {
         });
     }
 
-    fn sync(&self) -> Result<(), Error> {
-        let price: f64;
-
+    fn update(&self) -> Result<(), Error> {
         let response: CoingeckoResponse = reqwest::blocking::get(COINGECKO_REQUEST_URL)?.json()?;
         println!("response {:?}", response);
-        self.update(response.kaspa.usd);
+        let mut price = self.price.lock().unwrap();
+        *price = response.kaspa.usd;
         Ok(())
     }
 
-    fn update(&self, price: f64) {
-        if let Ok(mut price_unlocked) = self.price.lock() {
-            *price_unlocked = price;
-        };
-
-        println!("new price: {}", price);
-    }
-
-    pub fn get_price(self: Arc<Self>) -> f64 {
-        if let Ok(price) = self.price.lock() {
-            return *price;
-        };
-        0.0
+    pub fn get_price(&self) -> f64 {
+        *self.price.lock().unwrap()
     }
 }
