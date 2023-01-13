@@ -5,6 +5,7 @@ mod twitter;
 use coingecko_handler::CoinGeckoHandler;
 use dotenv::dotenv;
 use kaspa_rest_handler::RestHandler;
+use log::{debug, info};
 use twitter::TwitterKeys;
 
 use std::{error::Error as StdError, sync::mpsc};
@@ -12,6 +13,7 @@ use std::{error::Error as StdError, sync::mpsc};
 pub type Error = Box<dyn StdError + 'static>;
 
 fn main() -> Result<(), Error> {
+    env_logger::init();
     dotenv().ok();
     let consumer_key = parse_env_var("CONSUMER_KEY");
     let consumer_secret = parse_env_var("CONSUMER_SECRET");
@@ -33,20 +35,20 @@ fn main() -> Result<(), Error> {
         for amount in amount_vec {
             let kas_amount = (amount / 100000000) as f64;
             let usd_amount = kas_amount * coingecko_handler.get_price();
-            println!(
+            debug!(
                 "amount received: {}, amount in KAS: {}, in USD: {}",
                 amount, kas_amount, usd_amount
             );
 
             let circulation = kaspa_rest_handler.get_circulation();
             let threshold = (whale_factor as f64) / 100.0 * circulation;
-            println!("CIRCULATION {}, THRESHOLD {}", circulation, threshold);
+            debug!("circulation {}, threshold {}", circulation, threshold);
             if kas_amount > threshold {
                 let message = format!(
                     "Whale Alert!!! a transaction of {} KAS has been detected (more than {}% of circulation!)",
                     kas_amount,
                     whale_factor);
-                println!("{}", message);
+                info!("{}", message);
             }
         }
     }

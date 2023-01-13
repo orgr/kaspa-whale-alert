@@ -1,10 +1,10 @@
+use log::{debug, error, info};
+use rust_socketio::{ClientBuilder, Event, Payload, RawClient};
 use serde::{Deserialize, Deserializer};
 use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-
-use rust_socketio::{ClientBuilder, Event, Payload, RawClient};
 
 use crate::Error;
 
@@ -68,18 +68,18 @@ impl RestHandler {
                     }
 
                     if tx_clone.send(amount_vec).is_err() {
-                        println!("failed to send tx vector on channel");
+                        debug!("failed to send tx vector on channel");
                     }
                     return;
                 }
-                println!("non chain block payload, skipping");
+                debug!("non chain block payload, skipping");
             }
-            _ => println!("Unrecognized new-block payload"),
+            _ => debug!("Unrecognized new-block payload"),
         };
 
         ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
             .on(Event::Connect, |_, socket: RawClient| {
-                println!("SocketIO connected!");
+                debug!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
             })
             .on("new-block", block_handler)
@@ -96,11 +96,10 @@ impl RestHandler {
 
     fn listen(self: Arc<Self>) {
         thread::spawn(move || {
-            println!("REST started sync");
+            info!("sync started");
             loop {
-                println!("REST - about to sync!");
                 if self.update().is_err() {
-                    println!("sync failed");
+                    error!("sync failed");
                 }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }

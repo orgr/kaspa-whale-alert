@@ -1,4 +1,5 @@
 use crate::Error;
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     sync::{Arc, Mutex},
@@ -35,14 +36,12 @@ impl CoinGeckoHandler {
 
     fn listen(self: Arc<Self>) {
         thread::spawn(move || {
-            println!("COINMARKETCAP started sync");
+            info!("sync started");
             loop {
-                println!("COINMARKETCAP - about to sync!");
                 match self.update() {
-                    Err(e) => println!("{:?}", e),
-                    Ok(_) => println!("it went ok"),
+                    Err(e) => error!("{:?}", e),
+                    Ok(_) => debug!("update successful"),
                 }
-                println!("finished sync!");
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }
         });
@@ -50,7 +49,7 @@ impl CoinGeckoHandler {
 
     fn update(&self) -> Result<(), Error> {
         let response: CoingeckoResponse = reqwest::blocking::get(COINGECKO_REQUEST_URL)?.json()?;
-        println!("response {:?}", response);
+        debug!("response {:?}", response);
         let mut price = self.price.lock().unwrap();
         *price = response.kaspa.usd;
         Ok(())
