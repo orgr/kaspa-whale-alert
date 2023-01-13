@@ -7,7 +7,7 @@ use dotenv::dotenv;
 use kaspa_rest_handler::RestHandler;
 use twitter::TwitterKeys;
 
-use std::{error::Error as StdError, net::IpAddr, str::FromStr, sync::mpsc};
+use std::{error::Error as StdError, sync::mpsc};
 
 pub type Error = Box<dyn StdError + 'static>;
 

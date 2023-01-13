@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use rust_socketio::client::Client;
 use rust_socketio::{ClientBuilder, Event, Payload, RawClient};
 
 use crate::Error;
@@ -15,7 +14,6 @@ const KASPA_REST_SOCKETIO_URL: &str = "https://api.kaspa.org/ws/socket.io/";
 const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
 pub struct RestHandler {
-    socket: Client,
     circulation: Mutex<f64>,
 }
 
@@ -43,14 +41,12 @@ where
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
-    enum StringOrOther {
+    enum StringToDeserialize {
         String(String),
     }
 
-    match StringOrOther::deserialize(to_deserialize)? {
-        StringOrOther::String(s) => s.parse::<u64>().map_err(serde::de::Error::custom),
-        _ => Err(serde::de::Error::custom("Failed to parse as string")),
-    }
+    let StringToDeserialize::String(s) = StringToDeserialize::deserialize(to_deserialize)?;
+    s.parse::<u64>().map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,10 +58,11 @@ struct BlockVerboseData {
 impl RestHandler {
     pub fn handle(tx: SyncSender<Vec<u64>>) -> Arc<Self> {
         let tx_clone = tx.clone();
-        let block_handler = move |payload: Payload, socket: RawClient| match payload {
+        let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
                 if let Ok(block_payload) = serde_json::from_str::<NewBlockPayload>(&string_data) {
                     let mut amount_vec = Vec::<u64>::new();
+                    assert!(block_payload.verbose_data.is_chain_block);
                     for tx in block_payload.transactions {
                         amount_vec.push(tx.outputs.iter().map(|op| op.amount).max().unwrap())
                     }
@@ -80,7 +77,7 @@ impl RestHandler {
             _ => println!("Unrecognized new-block payload"),
         };
 
-        let socket = ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
+        ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
             .on(Event::Connect, |_, socket: RawClient| {
                 println!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
@@ -90,7 +87,6 @@ impl RestHandler {
             .expect("websocket connection failed");
 
         let arc = Arc::new(Self {
-            socket,
             circulation: Mutex::new(0.0),
         });
 
@@ -103,8 +99,9 @@ impl RestHandler {
             println!("REST started sync");
             loop {
                 println!("REST - about to sync!");
-                self.update();
-                println!("finished sync!");
+                if self.update().is_err() {
+                    println!("sync failed");
+                }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }
         });
