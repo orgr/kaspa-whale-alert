@@ -13,10 +13,6 @@ const CIRCULATION_REQUEST_URL: &str =
 const KASPA_REST_SOCKETIO_URL: &str = "https://api.kaspa.org/ws/socket.io/";
 const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
-pub struct RestHandler {
-    circulation: Mutex<f64>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NewBlockPayload {
@@ -25,8 +21,16 @@ struct NewBlockPayload {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Tx {
+    verbose_data: TxVerboseData,
     outputs: Vec<TxOutput>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TxVerboseData {
+    transaction_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,16 +59,30 @@ struct BlockVerboseData {
     is_chain_block: bool,
 }
 
+pub struct TxInfo {
+    pub amount: u64,
+    pub id: String,
+}
+
+pub struct RestHandler {
+    circulation: Mutex<f64>,
+}
+
 impl RestHandler {
-    pub fn handle(tx: SyncSender<Vec<u64>>) -> Arc<Self> {
+    pub fn handle(tx: SyncSender<Vec<TxInfo>>) -> Arc<Self> {
         let tx_clone = tx.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
                 if let Ok(block_payload) = serde_json::from_str::<NewBlockPayload>(&string_data) {
-                    let mut amount_vec = Vec::<u64>::new();
+                    let mut amount_vec = Vec::<TxInfo>::new();
                     assert!(block_payload.verbose_data.is_chain_block);
-                    for tx in block_payload.transactions {
-                        amount_vec.push(tx.outputs.iter().map(|op| op.amount).max().unwrap())
+                    let txs = block_payload.transactions;
+                    for tx in &txs[1..txs.len()] {
+                        // skip coinbase tx
+                        amount_vec.push(TxInfo {
+                            amount: tx.outputs.iter().map(|op| op.amount).max().unwrap(),
+                            id: tx.verbose_data.transaction_id.clone(),
+                        });
                     }
 
                     if tx_clone.send(amount_vec).is_err() {
