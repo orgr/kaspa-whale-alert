@@ -20,13 +20,13 @@ fn main() -> Result<(), Error> {
     let token_secret = parse_env_var("TOKEN_SECRET");
     let whale_factor: u8 = parse_env_var("WHALE_FACTOR").parse()?;
 
-    // let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
-
-    // twitter_keys.tweet(message).await;
+    let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
 
     let (tx, rx) = mpsc::sync_channel::<Vec<TxInfo>>(10);
     let coingecko_handler = CoinGeckoHandler::handle();
     let kaspa_rest_handler = RestHandler::handle(tx);
+
+    twitter_keys.tweet("*beep boop beep*\nwhale watcher is up and running...".into());
 
     loop {
         let tx_info_vec = rx.recv().unwrap();
@@ -50,6 +50,7 @@ fn main() -> Result<(), Error> {
                     kas_amount, percent_of_supply, tx_info.id
                 );
                 info!("{}", message);
+                twitter_keys.tweet(message);
             }
         }
     }
