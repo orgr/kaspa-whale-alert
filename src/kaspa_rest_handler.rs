@@ -116,8 +116,9 @@ impl RestHandler {
         thread::spawn(move || {
             info!("sync started");
             loop {
-                if self.update().is_err() {
-                    error!("sync failed");
+                match self.update() {
+                    Err(e) => error!("{:?}", e),
+                    Ok(_) => info!("update successful"),
                 }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }

@@ -1,4 +1,3 @@
-use async_std::task;
 use log::{error, info};
 use std::error::Error;
 use twitter_v2::authorization::Oauth1aToken;
