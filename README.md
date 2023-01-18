@@ -4,10 +4,9 @@ A Twitter bot that watches the Kaspa network and tweets whenever a "large" trans
 
 ## Usage
 ### Prerequisites
-* Kaspad access
 * A twitter account with write privilages using OAuth1.0a
 ### Usage
-Add a .env file to project's root dir with the following parameters:
+Use env vars or add a .env file to project's root dir with the following vars:
 ```
 CONSUMER_KEY="<twitter consumer key>"
 CONSUMER_SECRET="<twitter consumer secret>"
