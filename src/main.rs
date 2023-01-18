@@ -18,18 +18,29 @@ fn main() -> Result<(), Error> {
     let consumer_secret = parse_env_var("CONSUMER_SECRET");
     let access_token = parse_env_var("ACCESS_TOKEN");
     let token_secret = parse_env_var("TOKEN_SECRET");
-    let whale_factor: u8 = parse_env_var("WHALE_FACTOR").parse()?;
+    let whale_factor: f64 = parse_env_var("WHALE_FACTOR").parse()?;
 
     let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
 
-    let (tx, rx) = mpsc::sync_channel::<Vec<TxInfo>>(10);
+    let (tx_send, tx_recv) = mpsc::sync_channel::<Vec<TxInfo>>(10);
+    let (supply_ready_send, supply_ready_recv) = mpsc::sync_channel::<()>(1);
     let coingecko_handler = CoinGeckoHandler::handle();
-    let kaspa_rest_handler = RestHandler::handle(tx);
+    let kaspa_rest_handler = RestHandler::handle(tx_send, supply_ready_send);
 
-    twitter_keys.tweet("*beep boop beep*\nwhale watcher is up and running...".into());
+    supply_ready_recv.recv().unwrap();
+    let mut supply = kaspa_rest_handler.get_circulation();
+    assert!(supply != 0.0);
+    let mut threshold = get_threshold(whale_factor, supply);
+    let startup_message = format!(
+        "*beep boop beep*\nwhale watcher is up and running...\n\
+                           alerting on transactions larger than {} kas",
+        threshold
+    );
+    info!("{}", startup_message);
+    twitter_keys.tweet(startup_message.into());
 
     loop {
-        let tx_info_vec = rx.recv().unwrap();
+        let tx_info_vec = tx_recv.recv().unwrap();
         for tx_info in tx_info_vec {
             let kas_amount = explicit_amount_to_kas_amount(tx_info.amount);
             let usd_amount = kas_amount * coingecko_handler.get_price();
@@ -38,11 +49,12 @@ fn main() -> Result<(), Error> {
                 tx_info.amount, kas_amount, usd_amount
             );
 
-            let circulation = kaspa_rest_handler.get_circulation();
-            let threshold = (whale_factor as f64) / 100.0 * circulation;
-            debug!("circulation {}, threshold {}", circulation, threshold);
+            supply = kaspa_rest_handler.get_circulation();
+            threshold = get_threshold(whale_factor, supply);
+
+            debug!("supply {}, threshold {}", supply, threshold);
             if kas_amount >= threshold {
-                let percent_of_supply = (kas_amount / circulation) * 100.0;
+                let percent_of_supply = (kas_amount / supply) * 100.0;
                 let message = format!(
                     "Whale Alert!!! a transaction of {} KAS has been detected \n\
                      ({}% of current supply) \n\
@@ -54,6 +66,10 @@ fn main() -> Result<(), Error> {
             }
         }
     }
+}
+
+fn get_threshold(whale_factor: f64, supply: f64) -> f64 {
+    whale_factor / 100.0 * supply
 }
 
 fn parse_env_var(var_name: &str) -> String {

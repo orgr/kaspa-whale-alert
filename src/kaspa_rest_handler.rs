@@ -69,8 +69,11 @@ pub struct RestHandler {
 }
 
 impl RestHandler {
-    pub fn handle(tx: SyncSender<Vec<TxInfo>>) -> Arc<Self> {
-        let tx_clone = tx.clone();
+    pub fn handle(
+        tx_send: SyncSender<Vec<TxInfo>>,
+        circulation_ready_send: SyncSender<()>,
+    ) -> Arc<Self> {
+        let tx_clone = tx_send.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
                 if let Ok(block_payload) = serde_json::from_str::<NewBlockPayload>(&string_data) {
@@ -108,17 +111,24 @@ impl RestHandler {
             circulation: Mutex::new(0.0),
         });
 
-        arc.clone().listen();
+        arc.clone().listen(circulation_ready_send);
         arc
     }
 
-    fn listen(self: Arc<Self>) {
+    fn listen(self: Arc<Self>, ready_send: SyncSender<()>) {
         thread::spawn(move || {
             info!("sync started");
+            let mut ready = false;
             loop {
                 match self.update() {
                     Err(e) => error!("{:?}", e),
-                    Ok(_) => info!("update successful"),
+                    Ok(_) => {
+                        if !ready {
+                            ready = true;
+                            ready_send.send(()).unwrap();
+                        }
+                        info!("update successful");
+                    }
                 }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }
