@@ -24,6 +24,11 @@ impl TwitterKeys {
     }
 
     pub(crate) fn tweet(&self, text: String) {
+        if cfg!(debug_assertions) {
+            info!("skipping tweet");
+            return;
+        }
+        info!("tweeting");
         self.tokio_runtime.block_on(async {
             let result = self.tweet_async(text).await;
             if result.is_err() {

@@ -56,10 +56,13 @@ fn main() -> Result<(), Error> {
             if kas_amount >= threshold {
                 let percent_of_supply = (kas_amount / supply) * 100.0;
                 let message = format!(
-                    "Whale Alert!!! a transaction of {} KAS has been detected \n\
-                     ({}% of current supply) \n\
-                     tx id: {}",
-                    kas_amount, percent_of_supply, tx_info.id
+                    "Whale Alert!!! a transaction of {:.2}M KAS ({:.2}$) has been detected \n\
+                     {:.4}% of current supply \n\
+                     {}",
+                    kas_amount / 1000000.0,
+                    usd_amount,
+                    percent_of_supply,
+                    get_tx_id_link(&tx_info.id)
                 );
                 info!("{}", message);
                 twitter_keys.tweet(message);
@@ -70,6 +73,11 @@ fn main() -> Result<(), Error> {
 
 fn get_threshold(whale_factor: f64, supply: f64) -> f64 {
     whale_factor / 100.0 * supply
+}
+
+const BLOCK_EXPLORER_TX_ID_URL: &str = "https://explorer.kaspa.org/txs/";
+fn get_tx_id_link(tx_id: &str) -> String {
+    format!("{}{}", BLOCK_EXPLORER_TX_ID_URL, tx_id)
 }
 
 fn parse_env_var(var_name: &str) -> String {
