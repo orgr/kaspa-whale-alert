@@ -6,8 +6,8 @@ A Twitter bot that watches the Kaspa network and tweets whenever a "large" trans
 ### Prerequisites
 * A twitter account with write privilages using OAuth1.0a
 ### Usage
-Use env vars or add a .env file to project's root dir with the following vars:
-```
+Use the following environment variables or specify them in a `.env` file in project's root dir:
+```bash
 CONSUMER_KEY="<twitter consumer key>"
 CONSUMER_SECRET="<twitter consumer secret>"
 ACCESS_TOKEN="<twitter oauth1a access token>"
@@ -16,10 +16,14 @@ WHALE_FACTOR="<precentage of market cap to treat a transaction as large>"
 ```
 
 for example
-```
+```bash
 CONSUMER_KEY="xxxxxxxxxxxxxxxxxxxxxxxxx"
 CONSUMER_SECRET="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ACCESS_TOKEN="xxxxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 TOKEN_SECRET="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-WHALE_FACTOR="10"
+WHALE_FACTOR="0.01"
+RUST_LOG="info"
 ```
+### Logs
+For logs I used the `env_logger` crate, so the default log level is `error`.
+To specify another level use the `RUST_LOG` environment variable.
