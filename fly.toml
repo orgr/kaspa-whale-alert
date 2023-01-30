@@ -7,7 +7,7 @@ processes = []
 
 [env]
 WHALE_FACTOR=0.02
-RUST_LOG="info"
+RUST_LOG="debug"
 
 [experimental]
   auto_rollback = true

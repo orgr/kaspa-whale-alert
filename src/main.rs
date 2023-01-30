@@ -38,22 +38,26 @@ fn main() -> Result<(), Error> {
     );
     info!("{}", startup_message);
     twitter_keys.tweet(startup_message.into());
-
+    let mut max_amount = 0.0;
     loop {
         let tx_info_vec = tx_recv.recv().unwrap();
         for tx_info in tx_info_vec {
             let kas_amount = explicit_amount_to_kas_amount(tx_info.amount);
             let usd_amount = kas_amount * coingecko_handler.get_price();
-            debug!(
-                "amount received: {}, amount in KAS: {}, in USD: {}",
-                tx_info.amount, kas_amount, usd_amount
-            );
 
             supply = kaspa_rest_handler.get_circulation();
             threshold = get_threshold(whale_factor, supply);
+            if kas_amount > max_amount {
+                max_amount = kas_amount;
+            }
+            debug!(
+                "amount received: {}\tamount in KAS: {}\tin USD: {}\t\
+                 supply: {}\tthreshold: {}\tmax amount: {}",
+                tx_info.amount, kas_amount, usd_amount, supply, threshold, max_amount
+            );
 
-            debug!("supply {}, threshold {}", supply, threshold);
             if kas_amount >= threshold {
+                max_amount = 0.0;
                 let percent_of_supply = (kas_amount / supply) * 100.0;
                 let message = format!(
                     "Whale Alert!!! a transaction of {:.2}M KAS ({:.2}$) has been detected \n\
