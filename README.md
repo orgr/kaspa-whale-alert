@@ -1,6 +1,6 @@
 # Kaspa Whale Alert
 A Twitter bot that watches the Kaspa network and tweets whenever a "large" transaction is encountered.
-- A transaction is considered "large" when its amount relatively to Kaspa's marketcap is over the specified precentage (`WHALE_FACOTR`)
+- A transaction is considered "large" when its amount relatively to Kaspa's marketcap is over the specified precentage (`WHALE_FACTOR`)
 
 ## Usage
 ### Prerequisites
