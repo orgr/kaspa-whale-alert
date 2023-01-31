@@ -23,8 +23,24 @@ struct NewBlockPayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Tx {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inputs: Option<Vec<TxInput>>,
     verbose_data: TxVerboseData,
     outputs: Vec<TxOutput>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TxInput {
+    previous_outpoint: Outpoint,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Outpoint {
+    transaction_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    index: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,9 +50,17 @@ struct TxVerboseData {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct TxOutput {
     #[serde(deserialize_with = "deserialize_str_to_u64")]
     amount: u64,
+    verbose_data: TxOutputVerboseData,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TxOutputVerboseData {
+    script_public_key_address: String,
 }
 
 fn deserialize_str_to_u64<'de, D>(to_deserialize: D) -> Result<u64, D::Error>
