@@ -6,8 +6,8 @@ kill_timeout = 5
 processes = []
 
 [env]
-WHALE_FACTOR=0.02
-RUST_LOG="debug"
+WHALE_FACTOR=0.03
+RUST_LOG="info"
 
 [experimental]
   auto_rollback = true

@@ -95,14 +95,20 @@ impl RestHandler {
                 }
                 debug!("non chain block payload, skipping");
             }
-            _ => debug!("Unrecognized new-block payload"),
+            _ => error!("Unrecognized new-block payload"),
+        };
+
+        let error_handler = move |payload: Payload, socket: RawClient| {
+            error!("SocketIO Error {:?}, attempting to rejoin room", payload);
+            socket.emit("join-room", "blocks").unwrap();
         };
 
         ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
             .on(Event::Connect, |_, socket: RawClient| {
-                debug!("SocketIO connected!");
+                info!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
             })
+            .on(Event::Error, error_handler)
             .on("new-block", block_handler)
             .connect()
             .expect("websocket connection failed");

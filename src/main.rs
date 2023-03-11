@@ -5,7 +5,7 @@ mod twitter;
 use coingecko_handler::CoinGeckoHandler;
 use dotenv::dotenv;
 use kaspa_rest_handler::{RestHandler, TxInfo};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::{error::Error as StdError, sync::mpsc};
 use twitter::TwitterKeys;
 
@@ -40,7 +40,12 @@ fn main() -> Result<(), Error> {
     twitter_keys.tweet(startup_message.into());
     let mut max_amount = 0.0;
     loop {
+        info!("waiting for tx vector");
         let tx_info_vec = tx_recv.recv().unwrap();
+        if tx_info_vec.len() == 0 {
+            warn!("received empty tx vector from kaspa handler");
+        }
+
         for tx_info in tx_info_vec {
             let kas_amount = explicit_amount_to_kas_amount(tx_info.amount);
             let usd_amount = kas_amount * coingecko_handler.get_price();
