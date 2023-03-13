@@ -37,7 +37,11 @@ fn main() -> Result<(), Error> {
         threshold
     );
     info!("{}", startup_message);
-    twitter_keys.tweet(startup_message.into());
+
+    // startup tweet commented as we experience many
+    // restarts after the panic added for socketio errors
+
+    // twitter_keys.tweet(startup_message.into());
     let mut max_amount = 0.0;
     loop {
         info!("waiting for tx vector");
