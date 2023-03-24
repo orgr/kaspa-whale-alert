@@ -37,7 +37,10 @@ fn main() -> Result<(), Error> {
         threshold
     );
     info!("{}", startup_message);
-    twitter_keys.tweet(startup_message.into());
+
+    // startup tweet commented
+    // twitter_keys.tweet(startup_message.into());
+
     let mut max_amount = 0.0;
     loop {
         info!("waiting for tx vector");

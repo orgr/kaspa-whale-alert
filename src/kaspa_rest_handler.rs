@@ -10,7 +10,7 @@ use crate::Error;
 
 const CIRCULATION_REQUEST_URL: &str =
     "https://api.kaspa.org/info/coinsupply/circulating?in_billion=false";
-const KASPA_REST_SOCKETIO_URL: &str = "https://api.kaspa.org/ws/socket.io/";
+const KASPA_REST_SOCKETIO_URL: &str = "https://kaspa.ddnss.de:8001/ws/socket.io/";
 const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +73,17 @@ impl RestHandler {
         tx_send: SyncSender<Vec<TxInfo>>,
         circulation_ready_send: SyncSender<()>,
     ) -> Arc<Self> {
+        Self::connect(tx_send);
+
+        let arc = Arc::new(Self {
+            circulation: Mutex::new(0.0),
+        });
+
+        arc.clone().listen(circulation_ready_send);
+        arc
+    }
+
+    fn connect(tx_send: SyncSender<Vec<TxInfo>>) {
         let tx_clone = tx_send.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
@@ -98,9 +109,13 @@ impl RestHandler {
             _ => error!("Unrecognized new-block payload"),
         };
 
+        let disconnect_handler = move |_, _| {
+            Self::connect(tx_send.clone());
+        };
+
         let error_handler = move |payload: Payload, socket: RawClient| {
-            error!("SocketIO Error {:?}, attempting to rejoin room", payload);
-            socket.emit("join-room", "blocks").unwrap();
+            error!("SocketIO Error {:?}, forcing reconnect", payload);
+            socket.disconnect().unwrap();
         };
 
         ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
@@ -109,16 +124,10 @@ impl RestHandler {
                 while socket.emit("join-room", "blocks").is_err() {}
             })
             .on(Event::Error, error_handler)
+            .on(Event::Close, disconnect_handler)
             .on("new-block", block_handler)
             .connect()
             .expect("websocket connection failed");
-
-        let arc = Arc::new(Self {
-            circulation: Mutex::new(0.0),
-        });
-
-        arc.clone().listen(circulation_ready_send);
-        arc
     }
 
     fn listen(self: Arc<Self>, ready_send: SyncSender<()>) {
