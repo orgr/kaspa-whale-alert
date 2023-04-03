@@ -10,7 +10,7 @@ use crate::Error;
 
 const CIRCULATION_REQUEST_URL: &str =
     "https://api.kaspa.org/info/coinsupply/circulating?in_billion=false";
-const KASPA_REST_SOCKETIO_URL: &str = "https://kaspa.ddnss.de:8001/ws/socket.io/";
+const KASPA_REST_SOCKETIO_URL: &str = "http://kaspa.ddnss.de:8001/ws/socket.io/";
 const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
 #[derive(Debug, Deserialize)]
