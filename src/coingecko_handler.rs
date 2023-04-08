@@ -40,7 +40,7 @@ impl CoinGeckoHandler {
             loop {
                 match self.update() {
                     Err(e) => error!("{:?}", e),
-                    Ok(_) => info!("update successful"),
+                    Ok(_) => debug!("update successful"),
                 }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));
             }

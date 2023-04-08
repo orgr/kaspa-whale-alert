@@ -98,9 +98,10 @@ impl RestHandler {
                             id: tx.verbose_data.transaction_id.clone(),
                         });
                     }
-
-                    if tx_clone.send(amount_vec).is_err() {
-                        debug!("failed to send tx vector on channel");
+                    if amount_vec.len() > 0 {
+                        if tx_clone.send(amount_vec).is_err() {
+                            debug!("failed to send tx vector on channel");
+                        }
                     }
                     return;
                 }
@@ -142,7 +143,7 @@ impl RestHandler {
                             ready = true;
                             ready_send.send(()).unwrap();
                         }
-                        info!("update successful");
+                        debug!("update successful");
                     }
                 }
                 thread::sleep(Duration::from_secs(POLL_INTERVAL_SEC));

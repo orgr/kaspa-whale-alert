@@ -43,11 +43,8 @@ fn main() -> Result<(), Error> {
 
     let mut max_amount = 0.0;
     loop {
-        info!("waiting for tx vector");
+        info!("Loop iteration, waiting for tx vector");
         let tx_info_vec = tx_recv.recv().unwrap();
-        if tx_info_vec.len() == 0 {
-            warn!("received empty tx vector from kaspa handler");
-        }
 
         for tx_info in tx_info_vec {
             let kas_amount = explicit_amount_to_kas_amount(tx_info.amount);
