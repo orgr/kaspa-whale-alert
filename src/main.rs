@@ -5,7 +5,7 @@ mod twitter;
 use coingecko_handler::CoinGeckoHandler;
 use dotenv::dotenv;
 use kaspa_rest_handler::{RestHandler, TxInfo};
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::{error::Error as StdError, sync::mpsc};
 use twitter::TwitterKeys;
 
@@ -64,15 +64,7 @@ fn main() -> Result<(), Error> {
             if kas_amount >= threshold {
                 max_amount = 0.0;
                 let percent_of_supply = (kas_amount / supply) * 100.0;
-                let message = format!(
-                    "Whale Alert!!! a transaction of {:.2}M KAS ({:.2}$) has been detected \n\
-                     {:.4}% of current supply \n\
-                     {}",
-                    kas_amount / 1000000.0,
-                    usd_amount,
-                    percent_of_supply,
-                    get_tx_id_link(&tx_info.id)
-                );
+                let message = gen_message(kas_amount, usd_amount, percent_of_supply, &tx_info.id);
                 info!("{}", message);
                 twitter_keys.tweet(message);
             }
@@ -97,4 +89,20 @@ fn parse_env_var(var_name: &str) -> String {
 const EXPLICIT_AMOUNT_IN_KAS_AMOUNT: u64 = 100000000;
 fn explicit_amount_to_kas_amount(explicit: u64) -> f64 {
     (explicit / EXPLICIT_AMOUNT_IN_KAS_AMOUNT) as f64
+}
+
+use num_format::{Locale, ToFormattedString};
+fn gen_message(kas_amount: f64, usd_amount: f64, percent_of_supply: f64, tx_id: &str) -> String {
+    let usd_amount_str = (usd_amount.floor() as i64).to_formatted_string(&Locale::en);
+    let message = format!(
+        "Whale Alert!!! a transaction of {:.2}M KAS (${}) has been detected \n\
+                     {:.4}% of current supply \n\
+                     {}",
+        kas_amount / 1000000.0,
+        usd_amount_str,
+        percent_of_supply,
+        get_tx_id_link(tx_id)
+    );
+
+    return message;
 }
