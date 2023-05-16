@@ -18,6 +18,7 @@ fn main() -> Result<(), Error> {
     let consumer_secret = parse_env_var("CONSUMER_SECRET");
     let access_token = parse_env_var("ACCESS_TOKEN");
     let token_secret = parse_env_var("TOKEN_SECRET");
+    let socket_server_url = parse_env_var("WEBSOCKET_URL");
     let whale_factor: f64 = parse_env_var("WHALE_FACTOR").parse()?;
 
     let twitter_keys = TwitterKeys::new(consumer_key, consumer_secret, access_token, token_secret);
@@ -25,7 +26,7 @@ fn main() -> Result<(), Error> {
     let (tx_send, tx_recv) = mpsc::sync_channel::<Vec<TxInfo>>(10);
     let (supply_ready_send, supply_ready_recv) = mpsc::sync_channel::<()>(1);
     let coingecko_handler = CoinGeckoHandler::handle();
-    let kaspa_rest_handler = RestHandler::handle(tx_send, supply_ready_send);
+    let kaspa_rest_handler = RestHandler::handle(tx_send, supply_ready_send, socket_server_url);
 
     supply_ready_recv.recv().unwrap();
     let mut supply = kaspa_rest_handler.get_circulation();

@@ -16,47 +16,14 @@ const POLL_INTERVAL_SEC: u64 = 5 * 60;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NewBlockPayload {
-    transactions: Vec<Tx>,
-    verbose_data: BlockVerboseData,
+    txs: Vec<Tx>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Tx {
-    verbose_data: TxVerboseData,
-    outputs: Vec<TxOutput>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TxVerboseData {
-    transaction_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TxOutput {
-    #[serde(deserialize_with = "deserialize_str_to_u64")]
-    amount: u64,
-}
-
-fn deserialize_str_to_u64<'de, D>(to_deserialize: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringToDeserialize {
-        String(String),
-    }
-
-    let StringToDeserialize::String(s) = StringToDeserialize::deserialize(to_deserialize)?;
-    s.parse::<u64>().map_err(serde::de::Error::custom)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BlockVerboseData {
-    is_chain_block: bool,
+    tx_id: String,
+    outputs: Vec<(String, String)>,
 }
 
 pub struct TxInfo {
@@ -72,8 +39,9 @@ impl RestHandler {
     pub fn handle(
         tx_send: SyncSender<Vec<TxInfo>>,
         circulation_ready_send: SyncSender<()>,
+        websocket_url: String,
     ) -> Arc<Self> {
-        Self::connect(tx_send);
+        Self::connect(tx_send, websocket_url);
 
         let arc = Arc::new(Self {
             circulation: Mutex::new(0.0),
@@ -83,19 +51,23 @@ impl RestHandler {
         arc
     }
 
-    fn connect(tx_send: SyncSender<Vec<TxInfo>>) {
+    fn connect(tx_send: SyncSender<Vec<TxInfo>>, websocket_url: String) {
         let tx_clone = tx_send.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
                 if let Ok(block_payload) = serde_json::from_str::<NewBlockPayload>(&string_data) {
                     let mut amount_vec = Vec::<TxInfo>::new();
-                    assert!(block_payload.verbose_data.is_chain_block);
-                    let txs = block_payload.transactions;
+                    let txs = block_payload.txs;
                     for tx in &txs[1..txs.len()] {
                         // skip coinbase tx
                         amount_vec.push(TxInfo {
-                            amount: tx.outputs.iter().map(|op| op.amount).max().unwrap(),
-                            id: tx.verbose_data.transaction_id.clone(),
+                            amount: tx
+                                .outputs
+                                .iter()
+                                .map(|op| op.1.parse::<u64>().unwrap())
+                                .max()
+                                .unwrap(),
+                            id: tx.tx_id.clone(),
                         });
                     }
                     if amount_vec.len() > 0 {
@@ -105,13 +77,15 @@ impl RestHandler {
                     }
                     return;
                 }
+                debug!("block data--> {}", string_data);
                 debug!("non chain block payload, skipping");
             }
             _ => error!("Unrecognized new-block payload"),
         };
 
+        let closure_websocket_url = websocket_url.clone();
         let disconnect_handler = move |_, _| {
-            Self::connect(tx_send.clone());
+            Self::connect(tx_send.clone(), closure_websocket_url.clone());
         };
 
         let error_handler = move |payload: Payload, socket: RawClient| {
@@ -119,7 +93,7 @@ impl RestHandler {
             socket.disconnect().unwrap();
         };
 
-        ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
+        ClientBuilder::new(websocket_url)
             .on(Event::Connect, |_, socket: RawClient| {
                 info!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
