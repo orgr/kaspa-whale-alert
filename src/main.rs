@@ -5,7 +5,7 @@ mod twitter;
 use coingecko_handler::CoinGeckoHandler;
 use dotenv::dotenv;
 use kaspa_rest_handler::{RestHandler, TxInfo};
-use log::{debug, info};
+use log::{debug, error, info};
 use std::{error::Error as StdError, sync::mpsc};
 use twitter::TwitterKeys;
 
@@ -92,18 +92,48 @@ fn explicit_amount_to_kas_amount(explicit: u64) -> f64 {
     (explicit / EXPLICIT_AMOUNT_IN_KAS_AMOUNT) as f64
 }
 
+const TWEET_CHAR_LIMIT: usize = 280;
 use num_format::{Locale, ToFormattedString};
 fn gen_message(kas_amount: f64, usd_amount: f64, percent_of_supply: f64, tx_id: &str) -> String {
     let usd_amount_str = (usd_amount.floor() as i64).to_formatted_string(&Locale::en);
+    let sponsor_msg = std::env::var("SPONSOR_MESSAGE").unwrap_or("".to_string());
     let message = format!(
-        "Whale Alert!!! a transaction of {:.2}M KAS (${}) has been detected \n\
-                     {:.4}% of current supply \n\
+        "Whale Alert!!! a tx of {:.2}M KAS (${}) has been detected\n\
+                     {:.4}% of current supply\n\
+                     {}\n\
                      {}",
         kas_amount / 1000000.0,
         usd_amount_str,
         percent_of_supply,
-        get_tx_id_link(tx_id)
+        get_tx_id_link(tx_id),
+        sponsor_msg
     );
 
+    if message.len() > TWEET_CHAR_LIMIT {
+        error!("generated tweet is too long {}", message.len());
+    }
     return message;
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_tweet_length() {
+        dotenv().ok();
+        let message = gen_message(
+            999999.9,
+            2.0,
+            50.0,
+            "c6c5e3661d97d4b576dbb0a413dc66461dd508118ed612d6c0627d604e4758b7",
+        );
+        assert_eq!(message.len() < TWEET_CHAR_LIMIT, true);
+        println!("{}\n", message);
+        println!(
+            "{} chars left to reach limit",
+            TWEET_CHAR_LIMIT - message.len()
+        )
+    }
 }
