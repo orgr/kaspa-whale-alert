@@ -6,9 +6,10 @@ kill_timeout = 5
 processes = []
 
 [env]
-WHALE_FACTOR=0.05
+WHALE_FACTOR=0.02
 RUST_LOG="info"
 WEBSOCKET_URL="https://api.kaspa.org/ws/socket.io/"
+SPONSOR_MESSAGE="Sponsored by: minersboss.com -> Antminer KS3 $kas miner available!"
 
 [experimental]
   auto_rollback = true

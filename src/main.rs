@@ -44,7 +44,10 @@ fn main() -> Result<(), Error> {
 
     let mut max_amount = 0.0;
     loop {
-        info!("Loop iteration, waiting for tx vector");
+        info!(
+            "Loop iteration, waiting for tx vector, last max amount: {}, distance from threshold: {}",
+            max_amount, threshold - max_amount
+        );
         let tx_info_vec = tx_recv.recv().unwrap();
 
         for tx_info in tx_info_vec {
@@ -55,6 +58,7 @@ fn main() -> Result<(), Error> {
             threshold = get_threshold(whale_factor, supply);
             if kas_amount > max_amount {
                 max_amount = kas_amount;
+                info!("new max amount => {}", max_amount);
             }
             debug!(
                 "amount received: {}\tamount in KAS: {}\tin USD: {}\t\
@@ -98,7 +102,7 @@ fn gen_message(kas_amount: f64, usd_amount: f64, percent_of_supply: f64, tx_id: 
     let usd_amount_str = (usd_amount.floor() as i64).to_formatted_string(&Locale::en);
     let sponsor_msg = std::env::var("SPONSOR_MESSAGE").unwrap_or("".to_string());
     let message = format!(
-        "Whale Alert!!! a tx of {:.2}M KAS (${}) has been detected\n\
+        "Whale Alert!!! a tx of {:.2}M $kas (${}) has been detected\n\
                      {:.4}% of current supply\n\
                      {}\n\
                      {}",
