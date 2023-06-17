@@ -1,7 +1,8 @@
 use log::{debug, error, info};
+use rust_socketio::client::Client;
 use rust_socketio::{ClientBuilder, Event, Payload, RawClient};
 use serde::{Deserialize, Deserializer};
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -41,17 +42,40 @@ impl RestHandler {
         circulation_ready_send: SyncSender<()>,
         websocket_url: String,
     ) -> Arc<Self> {
-        Self::connect(tx_send, websocket_url);
-
+        let (ws_client_err_send, ws_client_err_recv): (SyncSender<()>, Receiver<()>) =
+            sync_channel(1);
+        let mut ws_client = Self::new_ws_client(
+            tx_send.clone(),
+            ws_client_err_send.clone(),
+            websocket_url.clone(),
+        )
+        .unwrap();
         let arc = Arc::new(Self {
             circulation: Mutex::new(0.0),
         });
 
+        thread::spawn(move || {
+            info!("listening for ws_client errors...");
+            loop {
+                ws_client_err_recv.recv().unwrap();
+                ws_client.disconnect().unwrap();
+                ws_client = Self::new_ws_client(
+                    tx_send.clone(),
+                    ws_client_err_send.clone(),
+                    websocket_url.clone(),
+                )
+                .unwrap();
+            }
+        });
         arc.clone().listen(circulation_ready_send);
         arc
     }
 
-    fn connect(tx_send: SyncSender<Vec<TxInfo>>, websocket_url: String) {
+    fn new_ws_client(
+        tx_send: SyncSender<Vec<TxInfo>>,
+        err_send: SyncSender<()>,
+        websocket_url: String,
+    ) -> Result<Client, Error> {
         let tx_clone = tx_send.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
@@ -83,26 +107,21 @@ impl RestHandler {
             _ => error!("Unrecognized new-block payload"),
         };
 
-        let closure_websocket_url = websocket_url.clone();
-        let disconnect_handler = move |_, _| {
-            Self::connect(tx_send.clone(), closure_websocket_url.clone());
-        };
-
-        let error_handler = move |payload: Payload, socket: RawClient| {
+        let error_handler = move |payload: Payload, _| {
             error!("SocketIO Error {:?}, forcing reconnect", payload);
-            socket.disconnect().unwrap();
+            err_send.send(()).unwrap();
         };
 
-        ClientBuilder::new(websocket_url)
+        let ws_client = ClientBuilder::new(websocket_url)
             .on(Event::Connect, |_, socket: RawClient| {
                 info!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
             })
             .on(Event::Error, error_handler)
-            .on(Event::Close, disconnect_handler)
             .on("new-block", block_handler)
-            .connect()
-            .expect("websocket connection failed");
+            .connect()?;
+        info!("connect func finished");
+        Ok(ws_client)
     }
 
     fn listen(self: Arc<Self>, ready_send: SyncSender<()>) {
