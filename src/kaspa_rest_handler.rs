@@ -42,14 +42,6 @@ impl RestHandler {
         circulation_ready_send: SyncSender<()>,
         websocket_url: String,
     ) -> Arc<Self> {
-        let (ws_client_err_send, ws_client_err_recv): (SyncSender<()>, Receiver<()>) =
-            sync_channel(1);
-        let mut ws_client = Self::new_ws_client(
-            tx_send.clone(),
-            ws_client_err_send.clone(),
-            websocket_url.clone(),
-        )
-        .unwrap();
         let arc = Arc::new(Self {
             circulation: Mutex::new(0.0),
         });
@@ -57,14 +49,14 @@ impl RestHandler {
         thread::spawn(move || {
             info!("listening for ws_client errors...");
             loop {
+                let (ws_client_err_send, ws_client_err_recv): (SyncSender<()>, Receiver<()>) =
+                    sync_channel(1);
+                let ws_client =
+                    Self::new_ws_client(tx_send.clone(), ws_client_err_send, websocket_url.clone())
+                        .unwrap();
                 ws_client_err_recv.recv().unwrap();
+                drop(ws_client_err_recv);
                 ws_client.disconnect().unwrap();
-                ws_client = Self::new_ws_client(
-                    tx_send.clone(),
-                    ws_client_err_send.clone(),
-                    websocket_url.clone(),
-                )
-                .unwrap();
             }
         });
         arc.clone().listen(circulation_ready_send);
@@ -109,7 +101,9 @@ impl RestHandler {
 
         let error_handler = move |payload: Payload, _| {
             error!("SocketIO Error {:?}, forcing reconnect", payload);
-            err_send.send(()).unwrap();
+            if let Err(_) = err_send.send(()) {
+                info!("error channel double send avoided :)")
+            }
         };
 
         let ws_client = ClientBuilder::new(websocket_url)
