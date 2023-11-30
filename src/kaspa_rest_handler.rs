@@ -1,7 +1,8 @@
 use log::{debug, error, info};
+use rust_socketio::client::Client;
 use rust_socketio::{ClientBuilder, Event, Payload, RawClient};
-use serde::{Deserialize, Deserializer};
-use std::sync::mpsc::SyncSender;
+use serde::Deserialize;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -10,58 +11,50 @@ use crate::Error;
 
 const CIRCULATION_REQUEST_URL: &str =
     "https://api.kaspa.org/info/coinsupply/circulating?in_billion=false";
-const KASPA_REST_SOCKETIO_URL: &str = "http://kaspa.ddnss.de:8001/ws/socket.io/";
+
+macro_rules!  get_tx_extra_info_req {
+    ($tx_id:ident) => {
+        format!("https://api.kaspa.org/transactions/{}?inputs=true&outputs=true&resolve_previous_outpoints=light", $tx_id)
+    };
+}
 const POLL_INTERVAL_SEC: u64 = 5 * 60;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NewBlockPayload {
-    transactions: Vec<Tx>,
-    verbose_data: BlockVerboseData,
+    txs: Vec<Tx>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Tx {
-    verbose_data: TxVerboseData,
-    outputs: Vec<TxOutput>,
+    tx_id: String,
+    outputs: Vec<(String, String)>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TxVerboseData {
-    transaction_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TxOutput {
-    #[serde(deserialize_with = "deserialize_str_to_u64")]
-    amount: u64,
-}
-
-fn deserialize_str_to_u64<'de, D>(to_deserialize: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringToDeserialize {
-        String(String),
-    }
-
-    let StringToDeserialize::String(s) = StringToDeserialize::deserialize(to_deserialize)?;
-    s.parse::<u64>().map_err(serde::de::Error::custom)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BlockVerboseData {
-    is_chain_block: bool,
-}
-
-pub struct TxInfo {
-    pub amount: u64,
+pub struct OutputCandidate {
+    pub idx: usize,
+    pub amount: f64,
     pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TxExtraInfo {
+    pub is_accepted: bool,
+    pub inputs: Vec<TxExtraInfoInput>,
+    pub outputs: Vec<TxExtraInfoOutput>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TxExtraInfoInput {
+    pub previous_outpoint_address: String,
+    pub previous_outpoint_amount: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TxExtraInfoOutput {
+    pub amount: u64,
+    pub script_public_key_address: String,
 }
 
 pub struct RestHandler {
@@ -70,33 +63,70 @@ pub struct RestHandler {
 
 impl RestHandler {
     pub fn handle(
-        tx_send: SyncSender<Vec<TxInfo>>,
-        circulation_ready_send: SyncSender<()>,
+        tx_send: SyncSender<Vec<OutputCandidate>>,
+        websocket_url: String,
+        whale_factor: f64,
     ) -> Arc<Self> {
-        Self::connect(tx_send);
-
         let arc = Arc::new(Self {
             circulation: Mutex::new(0.0),
         });
-
-        arc.clone().listen(circulation_ready_send);
+        let (supply_ready_send, supply_ready_recv): (SyncSender<()>, Receiver<()>) =
+            sync_channel(1);
+        let arc_clone_for_ws_listener = arc.clone();
+        thread::spawn(move || {
+            supply_ready_recv.recv().unwrap();
+            info!("listening for ws_client errors...");
+            loop {
+                let (ws_client_err_send, ws_client_err_recv): (SyncSender<()>, Receiver<()>) =
+                    sync_channel(1);
+                let ws_client = Self::new_ws_client(
+                    arc_clone_for_ws_listener.clone(),
+                    tx_send.clone(),
+                    ws_client_err_send,
+                    websocket_url.clone(),
+                    whale_factor,
+                )
+                .unwrap();
+                ws_client_err_recv.recv().unwrap();
+                drop(ws_client_err_recv);
+                ws_client.disconnect().unwrap();
+            }
+        });
+        arc.clone().listen_to_circulation(supply_ready_send);
         arc
     }
 
-    fn connect(tx_send: SyncSender<Vec<TxInfo>>) {
+    fn new_ws_client(
+        rest_handler: Arc<Self>,
+        tx_send: SyncSender<Vec<OutputCandidate>>,
+        err_send: SyncSender<()>,
+        websocket_url: String,
+        whale_factor: f64,
+    ) -> Result<Client, Error> {
         let tx_clone = tx_send.clone();
         let block_handler = move |payload: Payload, _| match payload {
             Payload::String(string_data) => {
                 if let Ok(block_payload) = serde_json::from_str::<NewBlockPayload>(&string_data) {
-                    let mut amount_vec = Vec::<TxInfo>::new();
-                    assert!(block_payload.verbose_data.is_chain_block);
-                    let txs = block_payload.transactions;
+                    debug!("new block");
+                    let mut amount_vec = Vec::<OutputCandidate>::new();
+                    let txs = block_payload.txs;
+
+                    let supply = rest_handler.get_circulation();
+                    assert!(supply != 0.0);
+                    let threshold = Self::get_threshold(whale_factor, supply);
                     for tx in &txs[1..txs.len()] {
                         // skip coinbase tx
-                        amount_vec.push(TxInfo {
-                            amount: tx.outputs.iter().map(|op| op.amount).max().unwrap(),
-                            id: tx.verbose_data.transaction_id.clone(),
-                        });
+                        for (i, output) in tx.outputs.iter().enumerate() {
+                            let explicit_amount = output.1.parse::<u64>().unwrap();
+                            let kas_amount = Self::explicit_amount_to_kas_amount(explicit_amount);
+                            if kas_amount > threshold {
+                                amount_vec.push(OutputCandidate {
+                                    idx: i,
+                                    amount: (kas_amount),
+                                    id: (tx.tx_id.clone()),
+                                })
+                            }
+                        }
                     }
                     if amount_vec.len() > 0 {
                         if tx_clone.send(amount_vec).is_err() {
@@ -105,38 +135,37 @@ impl RestHandler {
                     }
                     return;
                 }
+                debug!("block data--> {}", string_data);
                 debug!("non chain block payload, skipping");
             }
             _ => error!("Unrecognized new-block payload"),
         };
 
-        let disconnect_handler = move |_, _| {
-            Self::connect(tx_send.clone());
-        };
-
-        let error_handler = move |payload: Payload, socket: RawClient| {
+        let error_handler = move |payload: Payload, _| {
             error!("SocketIO Error {:?}, forcing reconnect", payload);
-            socket.disconnect().unwrap();
+            if let Err(_) = err_send.send(()) {
+                info!("error channel double send avoided :)")
+            }
         };
 
-        ClientBuilder::new(KASPA_REST_SOCKETIO_URL)
+        let ws_client = ClientBuilder::new(websocket_url)
             .on(Event::Connect, |_, socket: RawClient| {
                 info!("SocketIO connected!");
                 while socket.emit("join-room", "blocks").is_err() {}
             })
             .on(Event::Error, error_handler)
-            .on(Event::Close, disconnect_handler)
             .on("new-block", block_handler)
-            .connect()
-            .expect("websocket connection failed");
+            .connect()?;
+        info!("connect func finished");
+        Ok(ws_client)
     }
 
-    fn listen(self: Arc<Self>, ready_send: SyncSender<()>) {
+    fn listen_to_circulation(self: Arc<Self>, ready_send: SyncSender<()>) {
         thread::spawn(move || {
             info!("sync started");
             let mut ready = false;
             loop {
-                match self.update() {
+                match self.update_circulation() {
                     Err(e) => error!("{:?}", e),
                     Ok(_) => {
                         if !ready {
@@ -151,7 +180,7 @@ impl RestHandler {
         });
     }
 
-    fn update(&self) -> Result<(), Error> {
+    fn update_circulation(&self) -> Result<(), Error> {
         let response: f64 = reqwest::blocking::get(CIRCULATION_REQUEST_URL)?
             .text()?
             .parse()?;
@@ -162,5 +191,24 @@ impl RestHandler {
 
     pub fn get_circulation(&self) -> f64 {
         *self.circulation.lock().unwrap()
+    }
+
+    pub fn get_tx_extra_info(&self, tx_id: &str) -> Result<TxExtraInfo, Error> {
+        let req_url = get_tx_extra_info_req!(tx_id);
+        let response_str = reqwest::blocking::get(req_url)?.text()?;
+        match serde_json::from_str::<TxExtraInfo>(&response_str) {
+            Ok(tx_extra_info) => return Ok(tx_extra_info),
+            Err(_) => Err("Parsing TxExtraInfo failed".into()),
+        }
+    }
+
+    fn get_threshold(whale_factor: f64, supply: f64) -> f64 {
+        whale_factor / 100.0 * supply
+    }
+
+    const EXPLICIT_AMOUNT_IN_KAS_AMOUNT: u64 = 100000000;
+
+    fn explicit_amount_to_kas_amount(explicit: u64) -> f64 {
+        (explicit / Self::EXPLICIT_AMOUNT_IN_KAS_AMOUNT) as f64
     }
 }

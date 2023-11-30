@@ -8,6 +8,8 @@ processes = []
 [env]
 WHALE_FACTOR=0.03
 RUST_LOG="info"
+WEBSOCKET_URL="https://api.kaspa.org/ws/socket.io/"
+SPONSOR_MESSAGE="Sponsored: buy ks3 bitmain miner https://t.ly/zE-i"
 
 [experimental]
   auto_rollback = true
